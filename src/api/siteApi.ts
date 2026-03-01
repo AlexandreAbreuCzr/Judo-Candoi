@@ -5,9 +5,21 @@
 } from "../types/site";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080/api/v1";
+const RESOLVED_API_BASE_URL = (() => {
+  const normalizedBaseUrl = API_BASE_URL.trim();
+
+  if (normalizedBaseUrl.startsWith("//")) {
+    if (typeof window !== "undefined") {
+      return `${window.location.protocol}${normalizedBaseUrl}`;
+    }
+    return `https:${normalizedBaseUrl}`;
+  }
+
+  return normalizedBaseUrl;
+})();
 const API_ASSET_ORIGIN = (() => {
   try {
-    return new URL(API_BASE_URL).origin;
+    return new URL(RESOLVED_API_BASE_URL).origin;
   } catch (_error) {
     if (typeof window !== "undefined") {
       return window.location.origin;
@@ -21,7 +33,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const timeout = setTimeout(() => controller.abort(), 12000);
 
   try {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
+    const response = await fetch(`${RESOLVED_API_BASE_URL}${path}`, {
       ...init,
       headers: {
         "Content-Type": "application/json",
