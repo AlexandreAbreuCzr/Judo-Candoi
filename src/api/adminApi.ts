@@ -83,15 +83,34 @@ export function resolveApiAssetUrl(url?: string | null): string {
     return "";
   }
 
-  if (/^(https?:)?\/\//i.test(url) || url.startsWith("data:") || url.startsWith("blob:")) {
-    return url;
+  const normalizedUrl = url.trim();
+
+  if (normalizedUrl.startsWith("data:") || normalizedUrl.startsWith("blob:")) {
+    return normalizedUrl;
   }
 
-  if (url.startsWith("/uploads/")) {
-    return `${API_ASSET_ORIGIN}${url}`;
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/uploads\//i.test(normalizedUrl)) {
+    try {
+      const parsed = new URL(normalizedUrl);
+      return `${API_ASSET_ORIGIN}${parsed.pathname}`;
+    } catch (_error) {
+      return normalizedUrl;
+    }
   }
 
-  return url;
+  if (/^(https?:)?\/\//i.test(normalizedUrl)) {
+    return normalizedUrl;
+  }
+
+  if (normalizedUrl.startsWith("/uploads/")) {
+    return `${API_ASSET_ORIGIN}${normalizedUrl}`;
+  }
+
+  if (normalizedUrl.startsWith("uploads/")) {
+    return `${API_ASSET_ORIGIN}/${normalizedUrl}`;
+  }
+
+  return normalizedUrl;
 }
 
 export function checkAdminPassword(password: string): Promise<{ status: string }> {

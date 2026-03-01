@@ -68,13 +68,34 @@ export function resolveSiteAssetUrl(url?: string | null): string {
     return "";
   }
 
-  if (/^(https?:)?\/\//i.test(url) || url.startsWith("data:") || url.startsWith("blob:")) {
-    return url;
+  const normalizedUrl = url.trim();
+
+  if (normalizedUrl.startsWith("data:") || normalizedUrl.startsWith("blob:")) {
+    return normalizedUrl;
   }
 
-  if (url.startsWith("/uploads/")) {
-    return `${API_ASSET_ORIGIN}${url}`;
+  // Some older records may store local dev absolute URLs. Re-map them to the
+  // configured API origin when the path is an uploaded asset.
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/uploads\//i.test(normalizedUrl)) {
+    try {
+      const parsed = new URL(normalizedUrl);
+      return `${API_ASSET_ORIGIN}${parsed.pathname}`;
+    } catch (_error) {
+      return normalizedUrl;
+    }
   }
 
-  return url;
+  if (/^(https?:)?\/\//i.test(normalizedUrl)) {
+    return normalizedUrl;
+  }
+
+  if (normalizedUrl.startsWith("/uploads/")) {
+    return `${API_ASSET_ORIGIN}${normalizedUrl}`;
+  }
+
+  if (normalizedUrl.startsWith("uploads/")) {
+    return `${API_ASSET_ORIGIN}/${normalizedUrl}`;
+  }
+
+  return normalizedUrl;
 }

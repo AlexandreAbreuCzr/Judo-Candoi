@@ -149,6 +149,7 @@ function App() {
   const [heroSlideIndex, setHeroSlideIndex] = useState(0);
   const [isNavOpen, setIsNavOpen] = useState(false);
   const [selectedBlogSlug, setSelectedBlogSlug] = useState<string | null>(null);
+  const [brokenBlogImages, setBrokenBlogImages] = useState<Record<string, boolean>>({});
   const [athleteDisplayMode, setAthleteDisplayMode] = useState<AthleteDisplayMode>("Igualitario");
   const [athleteCategory, setAthleteCategory] = useState<ResultsGalleryCategory>("Treinos");
   const [athleteRound, setAthleteRound] = useState(0);
@@ -241,6 +242,18 @@ function App() {
   const selectedBlogPost = selectedBlogSlug
     ? blogPosts.find((post) => post.slug === selectedBlogSlug) ?? null
     : null;
+  const markBlogImageAsBroken = (slug: string) => {
+    setBrokenBlogImages((current) => {
+      if (current[slug]) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [slug]: true
+      };
+    });
+  };
   const athleteMoments = useMemo(() => buildAthleteMomentPool(athleteMediaPool), []);
   const athleteByCategory = useMemo(() => {
     const grouped: Record<ResultsGalleryCategory, AthleteMomentItem[]> = {
@@ -948,13 +961,17 @@ function App() {
 
             <div className="blog-grid">
               {blogPosts.map((post) => (
-                <article key={post.slug} className={`blog-card${post.imageUrl ? "" : " no-image"}`}>
-                  {post.imageUrl ? (
+                <article
+                  key={post.slug}
+                  className={`blog-card${post.imageUrl && !brokenBlogImages[post.slug] ? "" : " no-image"}`}
+                >
+                  {post.imageUrl && !brokenBlogImages[post.slug] ? (
                     <img
                       src={resolveSiteAssetUrl(post.imageUrl)}
                       alt={post.title}
                       className="blog-card-image"
                       loading="lazy"
+                      onError={() => markBlogImageAsBroken(post.slug)}
                     />
                   ) : null}
                   <div className="blog-card-body">
@@ -1050,12 +1067,13 @@ function App() {
             </header>
 
             <div className="blog-modal-content">
-              {selectedBlogPost.imageUrl ? (
+              {selectedBlogPost.imageUrl && !brokenBlogImages[selectedBlogPost.slug] ? (
                 <img
                   src={resolveSiteAssetUrl(selectedBlogPost.imageUrl)}
                   alt={selectedBlogPost.title}
                   className="blog-modal-image"
                   loading="lazy"
+                  onError={() => markBlogImageAsBroken(selectedBlogPost.slug)}
                 />
               ) : null}
               {(selectedBlogPost.content || selectedBlogPost.excerpt)
