@@ -2,7 +2,7 @@
 import { createExperimentalClassLead, getSiteContent, resolveSiteAssetUrl } from "./api/siteApi";
 import { AnimatedCounter } from "./components/AnimatedCounter";
 import { SectionTitle } from "./components/SectionTitle";
-import { athleteMediaPool, type AthleteMediaItem } from "./data/athletePhotoPool";
+import { athleteMediaPool } from "./data/athletePhotoPool";
 import { fallbackSiteContent } from "./data/fallbackContent";
 import type { ExperimentalClassLeadRequestDTO, SiteContentResponseDTO } from "./types/site";
 import "./styles.css";
@@ -41,22 +41,6 @@ const PRIDE_HIGHLIGHT_IMAGES = [
 const HERO_ROTATION_INTERVAL_MS = 5000;
 const ATHLETE_ROTATION_INTERVAL_MS = 5200;
 const ATHLETE_FRAME_SIZE = 6;
-const RESULTS_GALLERY_CATEGORIES = ["Treinos", "Campeonatos", "Podio"] as const;
-const ATHLETE_DISPLAY_MODES = ["Igualitario", "Aleatorio"] as const;
-type ResultsGalleryCategory = (typeof RESULTS_GALLERY_CATEGORIES)[number];
-type AthleteDisplayMode = (typeof ATHLETE_DISPLAY_MODES)[number];
-
-interface AthleteMomentItem extends AthleteMediaItem {
-  category: ResultsGalleryCategory;
-}
-
-function normalizeText(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim();
-}
 
 function createSeededRandom(seed: number): () => number {
   let current = seed + 0x6d2b79f5;
@@ -81,65 +65,6 @@ function shuffleWithSeed<T>(items: T[], seed: number): T[] {
   return cloned;
 }
 
-function pickRandomUnique<T>(items: T[], count: number, seed: number): T[] {
-  const random = createSeededRandom(seed);
-  const pool = [...items];
-  const selected: T[] = [];
-
-  while (pool.length > 0 && selected.length < count) {
-    const pickedIndex = Math.floor(random() * pool.length);
-    const [pickedItem] = pool.splice(pickedIndex, 1);
-    selected.push(pickedItem);
-  }
-
-  return selected;
-}
-
-function resolveAthleteCategoryHint(item: AthleteMediaItem): ResultsGalleryCategory | null {
-  if (item.categoryHint && item.categoryHint !== "auto") {
-    return item.categoryHint;
-  }
-
-  const normalizedSource = normalizeText(`${item.title} ${item.imageUrl} ${item.athleteName}`);
-
-  if (normalizedSource.includes("podio") || normalizedSource.includes("medal")) {
-    return "Podio";
-  }
-
-  if (normalizedSource.includes("campeon") || normalizedSource.includes("luta")) {
-    return "Campeonatos";
-  }
-
-  if (normalizedSource.includes("treino")) {
-    return "Treinos";
-  }
-
-  return null;
-}
-
-function buildAthleteMomentPool(items: AthleteMediaItem[]): AthleteMomentItem[] {
-  const categoryCounter: Record<ResultsGalleryCategory, number> = {
-    Treinos: 0,
-    Campeonatos: 0,
-    Podio: 0
-  };
-
-  return items.map((item) => {
-    const hintedCategory = resolveAthleteCategoryHint(item);
-    const lowestCategory = RESULTS_GALLERY_CATEGORIES.reduce((lowest, current) =>
-      categoryCounter[current] < categoryCounter[lowest] ? current : lowest
-    );
-    const category = hintedCategory ?? lowestCategory;
-
-    categoryCounter[category] += 1;
-
-    return {
-      ...item,
-      category
-    };
-  });
-}
-
 function App() {
   const [content, setContent] = useState<SiteContentResponseDTO>(fallbackSiteContent);
   const [apiStatus, setApiStatus] = useState<ApiStatus>("loading");
@@ -150,8 +75,6 @@ function App() {
   const [isNavOpen, setIsNavOpen] = useState(false);
   const [selectedBlogSlug, setSelectedBlogSlug] = useState<string | null>(null);
   const [brokenBlogImages, setBrokenBlogImages] = useState<Record<string, boolean>>({});
-  const [athleteDisplayMode, setAthleteDisplayMode] = useState<AthleteDisplayMode>("Igualitario");
-  const [athleteCategory, setAthleteCategory] = useState<ResultsGalleryCategory>("Treinos");
   const [athleteRound, setAthleteRound] = useState(0);
   const [athleteSeed] = useState(() => Math.floor(Math.random() * 1000000));
 
@@ -254,36 +177,9 @@ function App() {
       };
     });
   };
-  const athleteMoments = useMemo(() => buildAthleteMomentPool(athleteMediaPool), []);
-  const athleteByCategory = useMemo(() => {
-    const grouped: Record<ResultsGalleryCategory, AthleteMomentItem[]> = {
-      Treinos: [],
-      Campeonatos: [],
-      Podio: []
-    };
-
-    athleteMoments.forEach((item) => {
-      grouped[item.category].push(item);
-    });
-
-    return grouped;
-  }, [athleteMoments]);
-  const availableAthleteCategories = useMemo(
-    () => RESULTS_GALLERY_CATEGORIES.filter((category) => athleteByCategory[category].length > 0),
-    [athleteByCategory]
-  );
-  const currentAthleteCategory = availableAthleteCategories.includes(athleteCategory)
-    ? athleteCategory
-    : availableAthleteCategories[0] ?? "Treinos";
-  const athleteCategoryIndex = RESULTS_GALLERY_CATEGORIES.indexOf(currentAthleteCategory);
-  const athleteCategoryItems = athleteByCategory[currentAthleteCategory];
   const orderedAthleteItems = useMemo(
-    () =>
-      shuffleWithSeed(
-        athleteCategoryItems,
-        athleteSeed + (athleteCategoryIndex >= 0 ? athleteCategoryIndex : 0) * 997
-      ),
-    [athleteCategoryIndex, athleteCategoryItems, athleteSeed]
+    () => shuffleWithSeed(athleteMediaPool, athleteSeed),
+    [athleteSeed]
   );
   const athleteVisibleItems = useMemo(() => {
     if (orderedAthleteItems.length === 0) {
@@ -292,14 +188,6 @@ function App() {
 
     const frameSize = Math.min(ATHLETE_FRAME_SIZE, orderedAthleteItems.length);
 
-    if (athleteDisplayMode === "Aleatorio") {
-      return pickRandomUnique(
-        orderedAthleteItems,
-        frameSize,
-        athleteSeed + athleteRound * 73 + (athleteCategoryIndex >= 0 ? athleteCategoryIndex : 0) * 61
-      );
-    }
-
     const startIndex = (athleteRound * frameSize) % orderedAthleteItems.length;
     const rotatedItems = [
       ...orderedAthleteItems.slice(startIndex),
@@ -307,35 +195,10 @@ function App() {
     ];
 
     return rotatedItems.slice(0, frameSize);
-  }, [
-    athleteCategoryIndex,
-    athleteDisplayMode,
-    athleteRound,
-    athleteSeed,
-    orderedAthleteItems
-  ]);
+  }, [athleteRound, orderedAthleteItems]);
 
   useEffect(() => {
-    if (availableAthleteCategories.length === 0) {
-      return;
-    }
-
-    if (!availableAthleteCategories.includes(athleteCategory)) {
-      setAthleteCategory(availableAthleteCategories[0]);
-    }
-  }, [athleteCategory, availableAthleteCategories]);
-
-  useEffect(() => {
-    setAthleteRound(0);
-  }, [athleteDisplayMode, currentAthleteCategory]);
-
-  useEffect(() => {
-    const hasEnoughItemsForEqualRotation =
-      athleteDisplayMode === "Igualitario" && athleteCategoryItems.length > ATHLETE_FRAME_SIZE;
-    const hasEnoughItemsForRandomRotation =
-      athleteDisplayMode === "Aleatorio" && athleteCategoryItems.length > 1;
-
-    if (!hasEnoughItemsForEqualRotation && !hasEnoughItemsForRandomRotation) {
+    if (orderedAthleteItems.length <= ATHLETE_FRAME_SIZE) {
       return;
     }
 
@@ -346,28 +209,10 @@ function App() {
     return () => {
       window.clearInterval(interval);
     };
-  }, [athleteCategoryItems.length, athleteDisplayMode]);
+  }, [orderedAthleteItems.length]);
 
   function handleNavLinkClick(): void {
     setIsNavOpen(false);
-  }
-
-  function handleAthleteCategoryChange(category: ResultsGalleryCategory): void {
-    if (category === athleteCategory) {
-      return;
-    }
-
-    setAthleteCategory(category);
-    setAthleteRound(0);
-  }
-
-  function handleAthleteDisplayModeChange(mode: AthleteDisplayMode): void {
-    if (mode === athleteDisplayMode) {
-      return;
-    }
-
-    setAthleteDisplayMode(mode);
-    setAthleteRound(0);
   }
 
   function handleInputChange(
@@ -756,58 +601,20 @@ function App() {
             <SectionTitle
               eyebrow="Atletas"
               title="Galeria dos Atletas"
+              description="Treinos, campeonatos e podios em uma galeria unica, com fotos exibidas por inteiro."
             />
-
-            <div className="athlete-toolbar">
-              <div
-                className="athlete-toolbar-group"
-                role="tablist"
-                aria-label="Categorias de fotos dos atletas"
-              >
-                {RESULTS_GALLERY_CATEGORIES.map((category) =>
-                  athleteByCategory[category].length > 0 ? (
-                    <button
-                      key={`athlete-category-${category}`}
-                      type="button"
-                      className={`athlete-filter-button${
-                        currentAthleteCategory === category ? " active" : ""
-                      }`}
-                      role="tab"
-                      aria-selected={currentAthleteCategory === category}
-                      onClick={() => handleAthleteCategoryChange(category)}
-                    >
-                      {category}
-                    </button>
-                  ) : null
-                )}
-              </div>
-
-              <div className="athlete-toolbar-group athlete-mode-toggle" role="group" aria-label="Modo de exibicao">
-                {ATHLETE_DISPLAY_MODES.map((mode) => (
-                  <button
-                    key={`athlete-mode-${mode}`}
-                    type="button"
-                    className={`athlete-filter-button${athleteDisplayMode === mode ? " active" : ""}`}
-                    onClick={() => handleAthleteDisplayModeChange(mode)}
-                  >
-                    {mode}
-                  </button>
-                ))}
-              </div>
-            </div>
 
             {athleteVisibleItems.length > 0 ? (
               <div className="athlete-grid">
                 {athleteVisibleItems.map((item) => (
-                  <article
-                    key={`${currentAthleteCategory}-${item.id}-${athleteRound}-${athleteDisplayMode}`}
-                    className="athlete-card"
-                  >
-                    <img
-                      src={item.imageUrl}
-                      alt={`${item.athleteName} em ${item.category.toLowerCase()}`}
-                      loading="lazy"
-                    />
+                  <article key={`${item.id}-${athleteRound}`} className="athlete-card">
+                    <div className="athlete-card-media">
+                      <img
+                        src={item.imageUrl}
+                        alt={`${item.athleteName} em um momento no Judo Candoi`}
+                        loading="lazy"
+                      />
+                    </div>
                   </article>
                 ))}
               </div>
