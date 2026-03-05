@@ -1,10 +1,11 @@
 ﻿import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
-import { createExperimentalClassLead, getSiteContent, resolveSiteAssetUrl } from "./api/siteApi";
+import { getSiteContent, resolveSiteAssetUrl } from "./api/siteApi";
+import type { SyntheticEvent } from "react";
 import { AnimatedCounter } from "./components/AnimatedCounter";
 import { SectionTitle } from "./components/SectionTitle";
 import { athleteMediaPool } from "./data/athletePhotoPool";
 import { fallbackSiteContent } from "./data/fallbackContent";
-import type { ExperimentalClassLeadRequestDTO, SiteContentResponseDTO } from "./types/site";
+import type { SiteContentResponseDTO } from "./types/site";
 import "./styles.css";
 
 type ApiStatus = "loading" | "online" | "offline";
@@ -41,6 +42,49 @@ const PRIDE_HIGHLIGHT_IMAGES = [
 const HERO_ROTATION_INTERVAL_MS = 5000;
 const ATHLETE_ROTATION_INTERVAL_MS = 5200;
 const ATHLETE_FRAME_SIZE = 6;
+const IMAGE_FALLBACK_SRC = "/images/site/fachada-academia-16x9.jpg";
+
+function extractWhatsAppNumber(whatsappUrl: string): string | null {
+  const directMatch = whatsappUrl.match(/wa\.me\/(\d+)/i);
+  if (directMatch?.[1]) {
+    return directMatch[1];
+  }
+
+  try {
+    const parsed = new URL(whatsappUrl);
+
+    if (parsed.hostname.includes("wa.me")) {
+      const pathNumber = parsed.pathname.replace(/\D/g, "");
+      return pathNumber || null;
+    }
+
+    const queryNumber = parsed.searchParams.get("phone");
+    if (!queryNumber) {
+      return null;
+    }
+
+    const digits = queryNumber.replace(/\D/g, "");
+    return digits || null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function buildAppointmentWhatsAppUrl(whatsappUrl: string, message: string): string {
+  const phone = extractWhatsAppNumber(whatsappUrl);
+
+  if (phone) {
+    return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+  }
+
+  try {
+    const parsed = new URL(whatsappUrl);
+    parsed.searchParams.set("text", message);
+    return parsed.toString();
+  } catch (_error) {
+    return `https://wa.me/?text=${encodeURIComponent(message)}`;
+  }
+}
 
 function createSeededRandom(seed: number): () => number {
   let current = seed + 0x6d2b79f5;
@@ -134,7 +178,6 @@ function App() {
     };
   }, [selectedBlogSlug]);
 
-  const isSubmitting = submitStatus === "submitting";
   const whatsappUrl = content.callToActionSecondaryUrl || content.contact.whatsappUrl;
   const blogPosts = content.blogPosts.length > 0 ? content.blogPosts : fallbackSiteContent.blogPosts;
   const hasRealSponsors = content.sponsors.length > 0;
@@ -165,6 +208,19 @@ function App() {
   const selectedBlogPost = selectedBlogSlug
     ? blogPosts.find((post) => post.slug === selectedBlogSlug) ?? null
     : null;
+
+  function handleImageFallback(
+    event: SyntheticEvent<HTMLImageElement>,
+    fallbackSrc: string = IMAGE_FALLBACK_SRC
+  ): void {
+    const image = event.currentTarget;
+    if (image.dataset.fallbackApplied === "true") {
+      return;
+    }
+    image.dataset.fallbackApplied = "true";
+    image.src = fallbackSrc;
+  }
+
   const markBlogImageAsBroken = (slug: string) => {
     setBrokenBlogImages((current) => {
       if (current[slug]) {
@@ -225,7 +281,7 @@ function App() {
     }));
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+  function handleSubmit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
 
     if (!leadForm.name.trim() || !leadForm.phone.trim() || !leadForm.age.trim()) {
@@ -242,30 +298,25 @@ function App() {
       return;
     }
 
-    const payload: ExperimentalClassLeadRequestDTO = {
-      name: leadForm.name.trim(),
-      age,
-      phone: leadForm.phone.trim(),
-      objective: leadForm.objective.trim() ? leadForm.objective.trim() : undefined
-    };
+    const objective = leadForm.objective.trim() || "Nao informado";
+    const message = [
+      "Ola, equipe do Judo Candoi! Quero agendar uma aula experimental.",
+      "",
+      `Nome do aluno: ${leadForm.name.trim()}`,
+      `Idade: ${age}`,
+      `Telefone/WhatsApp: ${leadForm.phone.trim()}`,
+      `Objetivo: ${objective}`
+    ].join("\n");
 
-    try {
-      setSubmitStatus("submitting");
-      setSubmitMessage("Enviando seu pedido...");
-
-      const response = await createExperimentalClassLead(payload);
-
-      setSubmitStatus("success");
-      setSubmitMessage(response.message);
-      setLeadForm(initialLeadForm);
-    } catch (error) {
-      setSubmitStatus("error");
-      setSubmitMessage(
-        error instanceof Error
-          ? error.message
-          : "Nao foi possivel enviar agora. Tente novamente em instantes."
-      );
+    const appointmentWhatsAppUrl = buildAppointmentWhatsAppUrl(whatsappUrl, message);
+    const popup = window.open(appointmentWhatsAppUrl, "_blank", "noopener,noreferrer");
+    if (!popup) {
+      window.location.href = appointmentWhatsAppUrl;
     }
+
+    setSubmitStatus("success");
+    setSubmitMessage("WhatsApp aberto com a mensagem pronta para envio.");
+    setLeadForm(initialLeadForm);
   }
 
   return (
@@ -397,7 +448,12 @@ function App() {
                 key={`${sponsor.name}-${sponsor.logoUrl}-${index}`}
                 className="sponsors-strip-item"
               >
-                <img src={resolveSiteAssetUrl(sponsor.logoUrl)} alt={`Logo ${sponsor.name}`} loading="lazy" />
+                <img
+                  src={resolveSiteAssetUrl(sponsor.logoUrl)}
+                  alt={`Logo ${sponsor.name}`}
+                  loading="lazy"
+                  onError={(event) => handleImageFallback(event)}
+                />
                 <strong>{sponsor.name}</strong>
               </article>
             ))}
@@ -428,6 +484,9 @@ function App() {
                       }
                       alt={`Aluno em destaque ${student.name}`}
                       loading="lazy"
+                      onError={(event) =>
+                        handleImageFallback(event, PRIDE_HIGHLIGHT_IMAGES[index % PRIDE_HIGHLIGHT_IMAGES.length])
+                      }
                     />
                     <div className="pride-card-body">
                       <h3>{student.name}</h3>
@@ -613,6 +672,7 @@ function App() {
                         src={item.imageUrl}
                         alt={`${item.athleteName} em um momento no Judo Candoi`}
                         loading="lazy"
+                        onError={(event) => handleImageFallback(event, "/images/site/treino-forte-16x9.jpg")}
                       />
                     </div>
                   </article>
@@ -707,8 +767,8 @@ function App() {
                   />
                 </label>
 
-                <button className="button button-primary" type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? "Enviando..." : "Agendar aula experimental"}
+                <button className="button button-primary" type="submit">
+                  Agendar aula experimental
                 </button>
 
                 {submitMessage ? <p className={`form-feedback ${submitStatus}`}>{submitMessage}</p> : null}
@@ -813,7 +873,12 @@ function App() {
             <div className="sponsor-grid">
               {sponsorCards.map((sponsor, index) => (
                 <article key={`${sponsor.name}-${sponsor.logoUrl}-${index}`} className="sponsor-card">
-                  <img src={resolveSiteAssetUrl(sponsor.logoUrl)} alt={`Logo ${sponsor.name}`} loading="lazy" />
+                  <img
+                    src={resolveSiteAssetUrl(sponsor.logoUrl)}
+                    alt={`Logo ${sponsor.name}`}
+                    loading="lazy"
+                    onError={(event) => handleImageFallback(event)}
+                  />
                   <h3>{sponsor.name}</h3>
                 </article>
               ))}

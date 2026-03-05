@@ -86,19 +86,45 @@ export function resolveSiteAssetUrl(url?: string | null): string {
     return normalizedUrl;
   }
 
-  // Some older records may store local dev absolute URLs. Re-map them to the
-  // configured API origin when the path is an uploaded asset.
-  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/uploads\//i.test(normalizedUrl)) {
+  const remapAbsoluteUploadUrl = (candidateUrl: string): string | null => {
     try {
-      const parsed = new URL(normalizedUrl);
-      return `${API_ASSET_ORIGIN}${parsed.pathname}`;
+      const parsed = new URL(candidateUrl);
+      const isLocalDevHost = /^(localhost|127\.0\.0\.1)$/i.test(parsed.hostname);
+      const isCurrentStaticHost =
+        typeof window !== "undefined" && parsed.origin === window.location.origin;
+      const hasUploadPath = /\/uploads\//i.test(parsed.pathname);
+
+      if (!hasUploadPath) {
+        return null;
+      }
+
+      if (isLocalDevHost || isCurrentStaticHost) {
+        return `${API_ASSET_ORIGIN}${parsed.pathname}`;
+      }
+
+      return null;
     } catch (_error) {
-      return normalizedUrl;
+      return null;
     }
+  };
+
+  const remappedAbsoluteUrl = remapAbsoluteUploadUrl(normalizedUrl);
+  if (remappedAbsoluteUrl) {
+    return remappedAbsoluteUrl;
   }
 
   if (/^(https?:)?\/\//i.test(normalizedUrl)) {
     return normalizedUrl;
+  }
+
+  const normalizedRelativeUrl = normalizedUrl.replace(/^\.\//, "");
+
+  if (normalizedRelativeUrl.startsWith("/api/") && normalizedRelativeUrl.includes("/uploads/")) {
+    return `${API_ASSET_ORIGIN}${normalizedRelativeUrl}`;
+  }
+
+  if (normalizedRelativeUrl.startsWith("api/") && normalizedRelativeUrl.includes("/uploads/")) {
+    return `${API_ASSET_ORIGIN}/${normalizedRelativeUrl}`;
   }
 
   if (normalizedUrl.startsWith("/uploads/")) {
