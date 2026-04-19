@@ -114,27 +114,28 @@ export const fallbackSiteContent: SiteContentResponseDTO = {
   schedules: [
     {
       day: "Segunda e Quarta",
-      time: "18:00 - 18:50",
-      audience: "Infantil",
-      level: "Iniciante"
-    },
-    {
-      day: "Segunda e Quarta",
-      time: "19:00 - 20:00",
-      audience: "Juvenil",
-      level: "Intermediário"
+      time: "17:30 - 18:30",
+      audience: "Infantil"
     },
     {
       day: "Terça e Quinta",
-      time: "19:30 - 20:30",
-      audience: "Adulto",
-      level: "Todos os níveis"
+      time: "18:00 - 19:00",
+      audience: "Adolescente"
+    },
+    {
+      day: "Terça e Quinta",
+      time: "19:00 - 20:00",
+      audience: "Adultos"
+    },
+    {
+      day: "Terça",
+      time: "17:10",
+      audience: "Baby"
     },
     {
       day: "Sexta",
-      time: "18:30 - 20:00",
-      audience: "Equipe de competição",
-      level: "Avançado"
+      time: "17:30",
+      audience: "Baby"
     }
   ],
   blogPosts: [

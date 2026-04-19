@@ -790,7 +790,7 @@ function App() {
             <SectionTitle
               eyebrow="Rotina"
               title="Horarios de treino"
-              description="Organizacao por idade e nivel para treino seguro e eficiente."
+              description="Organizacao por turma e horario para treino seguro e eficiente."
             />
 
             <div className="table-wrap">
@@ -800,7 +800,6 @@ function App() {
                     <th>Dia</th>
                     <th>Horario</th>
                     <th>Turma</th>
-                    <th>Nivel</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -809,7 +808,6 @@ function App() {
                       <td>{item.day}</td>
                       <td>{item.time}</td>
                       <td>{item.audience}</td>
-                      <td>{item.level}</td>
                     </tr>
                   ))}
                 </tbody>

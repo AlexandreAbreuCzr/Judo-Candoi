@@ -39,7 +39,6 @@ export interface ScheduleItemDTO {
   day: string;
   time: string;
   audience: string;
-  level: string;
 }
 
 export interface BlogPostDTO {
