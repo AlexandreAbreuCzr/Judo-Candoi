@@ -35,7 +35,7 @@ type AuthStatus = "idle" | "checking";
 type PanelTab = "site" | "blog" | "sponsors";
 
 const PASSWORD_STORAGE_KEY = "judo-candoi-admin-password";
-const TRAINING_SCHEDULE_SLOTS = 4;
+const MIN_TRAINING_SCHEDULE_SLOTS = 4;
 
 const emptyBlogDraft: BlogPostUpsertDTO = {
   title: "",
@@ -77,7 +77,6 @@ function emptyScheduleItem(): SiteScheduleAdminDTO {
 function normalizeSchedules(schedules: SiteScheduleAdminDTO[] | undefined): SiteScheduleAdminDTO[] {
   const source = Array.isArray(schedules) ? schedules : [];
   const normalized = source
-    .slice(0, TRAINING_SCHEDULE_SLOTS)
     .map((item) => ({
       day: item?.day ?? "",
       time: item?.time ?? "",
@@ -85,7 +84,7 @@ function normalizeSchedules(schedules: SiteScheduleAdminDTO[] | undefined): Site
       level: item?.level ?? ""
     }));
 
-  while (normalized.length < TRAINING_SCHEDULE_SLOTS) {
+  while (normalized.length < MIN_TRAINING_SCHEDULE_SLOTS) {
     normalized.push(emptyScheduleItem());
   }
 
