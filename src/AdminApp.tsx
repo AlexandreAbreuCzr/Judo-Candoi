@@ -99,6 +99,26 @@ function toSitePayload(settings: SiteSettingsAdminResponseDTO): SiteSettingsUpda
   };
 }
 
+function sanitizeSchedulesForApi(schedules: SiteScheduleAdminDTO[] | undefined): SiteScheduleAdminDTO[] {
+  const source = Array.isArray(schedules) ? schedules : [];
+
+  return source
+    .map((item) => ({
+      day: (item?.day ?? "").trim(),
+      time: (item?.time ?? "").trim(),
+      audience: (item?.audience ?? "").trim(),
+      level: ""
+    }))
+    .filter((item) => item.day.length > 0 && item.time.length > 0 && item.audience.length > 0);
+}
+
+function toApiSiteSettingsPayload(settings: SiteSettingsUpdateDTO): SiteSettingsUpdateDTO {
+  return {
+    ...settings,
+    schedules: sanitizeSchedulesForApi(settings.schedules)
+  };
+}
+
 function toSlug(value: string): string {
   return value
     .toLowerCase()
@@ -370,7 +390,7 @@ function AdminApp() {
 
     try {
       setIsSavingSite(true);
-      const updated = await updateSiteSettings(adminPassword, siteSettings);
+      const updated = await updateSiteSettings(adminPassword, toApiSiteSettingsPayload(siteSettings));
       setSiteSettings(toSitePayload(updated));
       setSiteMessage("Informacoes do site atualizadas com sucesso.");
     } catch (error) {
