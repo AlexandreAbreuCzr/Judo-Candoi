@@ -1,3 +1,10 @@
+export interface SiteScheduleAdminDTO {
+  day: string;
+  time: string;
+  audience: string;
+  level: string;
+}
+
 export interface SiteSettingsAdminResponseDTO {
   id: number;
   brandName: string;
@@ -25,6 +32,7 @@ export interface SiteSettingsAdminResponseDTO {
   instagramHandle: string;
   academyAddress: string;
   googleMapsEmbed: string;
+  schedules: SiteScheduleAdminDTO[];
 }
 
 export type SiteSettingsUpdateDTO = Omit<SiteSettingsAdminResponseDTO, "id">;

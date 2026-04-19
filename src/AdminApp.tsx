@@ -23,6 +23,7 @@ import type {
   BlogPostUpsertDTO,
   PrideStudentAdminResponseDTO,
   PrideStudentUpsertDTO,
+  SiteScheduleAdminDTO,
   SponsorAdminResponseDTO,
   SponsorUpsertDTO,
   SiteSettingsAdminResponseDTO,
@@ -34,6 +35,7 @@ type AuthStatus = "idle" | "checking";
 type PanelTab = "site" | "blog" | "sponsors";
 
 const PASSWORD_STORAGE_KEY = "judo-candoi-admin-password";
+const TRAINING_SCHEDULE_SLOTS = 4;
 
 const emptyBlogDraft: BlogPostUpsertDTO = {
   title: "",
@@ -63,9 +65,39 @@ const emptySponsorDraft: SponsorUpsertDTO = {
   displayOrder: 0
 };
 
+function emptyScheduleItem(): SiteScheduleAdminDTO {
+  return {
+    day: "",
+    time: "",
+    audience: "",
+    level: ""
+  };
+}
+
+function normalizeSchedules(schedules: SiteScheduleAdminDTO[] | undefined): SiteScheduleAdminDTO[] {
+  const source = Array.isArray(schedules) ? schedules : [];
+  const normalized = source
+    .slice(0, TRAINING_SCHEDULE_SLOTS)
+    .map((item) => ({
+      day: item?.day ?? "",
+      time: item?.time ?? "",
+      audience: item?.audience ?? "",
+      level: item?.level ?? ""
+    }));
+
+  while (normalized.length < TRAINING_SCHEDULE_SLOTS) {
+    normalized.push(emptyScheduleItem());
+  }
+
+  return normalized;
+}
+
 function toSitePayload(settings: SiteSettingsAdminResponseDTO): SiteSettingsUpdateDTO {
   const { id: _id, ...payload } = settings;
-  return payload;
+  return {
+    ...payload,
+    schedules: normalizeSchedules(payload.schedules)
+  };
 }
 
 function toSlug(value: string): string {
@@ -82,6 +114,14 @@ function toSlug(value: string): string {
 function toIntOrZero(value: string): number {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function updateScheduleItem(
+  schedules: SiteScheduleAdminDTO[],
+  index: number,
+  patch: Partial<SiteScheduleAdminDTO>
+): SiteScheduleAdminDTO[] {
+  return schedules.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item));
 }
 
 function AdminApp() {
@@ -722,6 +762,101 @@ function AdminApp() {
                   required
                 />
               </label>
+
+              <div className="full admin-training-schedules">
+                <h3>Datas e horarios dos treinos</h3>
+                <div className="admin-training-schedule-grid">
+                  {siteSettings.schedules.map((schedule, index) => (
+                    <div key={`schedule-${index + 1}`} className="admin-training-schedule-card">
+                      <strong>Treino {index + 1}</strong>
+
+                      <label>
+                        Dia/Data
+                        <input
+                          type="text"
+                          value={schedule.day}
+                          onChange={(event) =>
+                            setSiteSettings((previous) =>
+                              previous
+                                ? {
+                                    ...previous,
+                                    schedules: updateScheduleItem(previous.schedules, index, {
+                                      day: event.target.value
+                                    })
+                                  }
+                                : previous
+                            )
+                          }
+                          required
+                        />
+                      </label>
+
+                      <label>
+                        Horario
+                        <input
+                          type="text"
+                          value={schedule.time}
+                          onChange={(event) =>
+                            setSiteSettings((previous) =>
+                              previous
+                                ? {
+                                    ...previous,
+                                    schedules: updateScheduleItem(previous.schedules, index, {
+                                      time: event.target.value
+                                    })
+                                  }
+                                : previous
+                            )
+                          }
+                          required
+                        />
+                      </label>
+
+                      <label>
+                        Turma
+                        <input
+                          type="text"
+                          value={schedule.audience}
+                          onChange={(event) =>
+                            setSiteSettings((previous) =>
+                              previous
+                                ? {
+                                    ...previous,
+                                    schedules: updateScheduleItem(previous.schedules, index, {
+                                      audience: event.target.value
+                                    })
+                                  }
+                                : previous
+                            )
+                          }
+                          required
+                        />
+                      </label>
+
+                      <label>
+                        Nivel
+                        <input
+                          type="text"
+                          value={schedule.level}
+                          onChange={(event) =>
+                            setSiteSettings((previous) =>
+                              previous
+                                ? {
+                                    ...previous,
+                                    schedules: updateScheduleItem(previous.schedules, index, {
+                                      level: event.target.value
+                                    })
+                                  }
+                                : previous
+                            )
+                          }
+                          required
+                        />
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
               <label className="full">
                 Chamada final
