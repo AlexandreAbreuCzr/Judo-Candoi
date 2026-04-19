@@ -49,6 +49,7 @@ async function request<T>(path: string, password: string, init?: RequestInit): P
 
     const response = await fetch(`${RESOLVED_API_BASE_URL}${path}`, {
       ...init,
+      cache: "no-store",
       headers,
       signal: controller.signal
     });

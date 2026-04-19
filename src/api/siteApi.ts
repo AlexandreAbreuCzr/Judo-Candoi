@@ -35,6 +35,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     const response = await fetch(`${RESOLVED_API_BASE_URL}${path}`, {
       ...init,
+      cache: "no-store",
       headers: {
         "Content-Type": "application/json",
         ...(init?.headers ?? {})
