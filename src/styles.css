@@ -1568,32 +1568,32 @@ footer a {
   grid-column: 1 / -1;
 }
 
-.admin-training-schedules {
-  display: grid;
-  gap: 0.65rem;
+.admin-helper-text {
+  margin-top: 0.32rem;
+  color: var(--text-muted);
+  font-weight: 400;
+  line-height: 1.45;
 }
 
-.admin-training-schedules h3 {
-  font-size: 1.2rem;
+.admin-schedules-editor {
+  margin-top: 0.3rem;
+  display: grid;
+  gap: 0.72rem;
 }
 
-.admin-training-schedule-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75rem;
-}
-
-.admin-training-schedule-card {
-  display: grid;
-  gap: 0.45rem;
-  border: 1px solid var(--line);
+.admin-schedule-row {
+  border: 1px solid #d6dee5;
   border-radius: 0.35rem;
   padding: 0.75rem;
-  background: #fff;
+  background: #f8fafc;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  gap: 0.65rem;
+  align-items: end;
 }
 
-.admin-training-schedule-card strong {
-  font-size: 0.95rem;
+.admin-schedule-row .button {
+  min-height: 2.55rem;
 }
 
 .admin-message {
@@ -1731,7 +1731,7 @@ footer a {
     grid-column: auto;
   }
 
-  .admin-training-schedule-grid {
+  .admin-schedule-row {
     grid-template-columns: 1fr;
   }
 

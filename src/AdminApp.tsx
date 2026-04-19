@@ -23,7 +23,7 @@ import type {
   BlogPostUpsertDTO,
   PrideStudentAdminResponseDTO,
   PrideStudentUpsertDTO,
-  SiteScheduleAdminDTO,
+  ScheduleItemAdminDTO,
   SponsorAdminResponseDTO,
   SponsorUpsertDTO,
   SiteSettingsAdminResponseDTO,
@@ -35,7 +35,6 @@ type AuthStatus = "idle" | "checking";
 type PanelTab = "site" | "blog" | "sponsors";
 
 const PASSWORD_STORAGE_KEY = "judo-candoi-admin-password";
-const MIN_TRAINING_SCHEDULE_SLOTS = 4;
 
 const emptyBlogDraft: BlogPostUpsertDTO = {
   title: "",
@@ -65,57 +64,43 @@ const emptySponsorDraft: SponsorUpsertDTO = {
   displayOrder: 0
 };
 
-function emptyScheduleItem(): SiteScheduleAdminDTO {
-  return {
-    day: "",
-    time: "",
-    audience: "",
-    level: ""
-  };
-}
+const emptyScheduleDraft: ScheduleItemAdminDTO = {
+  day: "",
+  time: "",
+  audience: ""
+};
 
-function normalizeSchedules(schedules: SiteScheduleAdminDTO[] | undefined): SiteScheduleAdminDTO[] {
-  const source = Array.isArray(schedules) ? schedules : [];
-  const normalized = source
-    .map((item) => ({
-      day: item?.day ?? "",
-      time: item?.time ?? "",
-      audience: item?.audience ?? "",
-      level: item?.level ?? ""
-    }));
-
-  while (normalized.length < MIN_TRAINING_SCHEDULE_SLOTS) {
-    normalized.push(emptyScheduleItem());
+function normalizeScheduleDrafts(schedules?: ScheduleItemAdminDTO[]): ScheduleItemAdminDTO[] {
+  if (!Array.isArray(schedules) || schedules.length === 0) {
+    return [{ ...emptyScheduleDraft }];
   }
 
-  return normalized;
+  const normalized = schedules.map((schedule) => ({
+    day: schedule?.day ?? "",
+    time: schedule?.time ?? "",
+    audience: schedule?.audience ?? ""
+  }));
+
+  return normalized.length > 0 ? normalized : [{ ...emptyScheduleDraft }];
+}
+
+function cleanScheduleDrafts(schedules: ScheduleItemAdminDTO[]): ScheduleItemAdminDTO[] {
+  const cleaned = schedules
+    .map((schedule) => ({
+      day: schedule.day.trim(),
+      time: schedule.time.trim(),
+      audience: schedule.audience.trim()
+    }))
+    .filter((schedule) => schedule.day || schedule.time || schedule.audience);
+
+  return cleaned.length > 0 ? cleaned : [{ ...emptyScheduleDraft }];
 }
 
 function toSitePayload(settings: SiteSettingsAdminResponseDTO): SiteSettingsUpdateDTO {
-  const { id: _id, ...payload } = settings;
+  const { id: _id, schedules, ...payload } = settings;
   return {
     ...payload,
-    schedules: normalizeSchedules(payload.schedules)
-  };
-}
-
-function sanitizeSchedulesForApi(schedules: SiteScheduleAdminDTO[] | undefined): SiteScheduleAdminDTO[] {
-  const source = Array.isArray(schedules) ? schedules : [];
-
-  return source
-    .map((item) => ({
-      day: (item?.day ?? "").trim(),
-      time: (item?.time ?? "").trim(),
-      audience: (item?.audience ?? "").trim(),
-      level: ""
-    }))
-    .filter((item) => item.day.length > 0 && item.time.length > 0 && item.audience.length > 0);
-}
-
-function toApiSiteSettingsPayload(settings: SiteSettingsUpdateDTO): SiteSettingsUpdateDTO {
-  return {
-    ...settings,
-    schedules: sanitizeSchedulesForApi(settings.schedules)
+    schedules: normalizeScheduleDrafts(schedules)
   };
 }
 
@@ -133,14 +118,6 @@ function toSlug(value: string): string {
 function toIntOrZero(value: string): number {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function updateScheduleItem(
-  schedules: SiteScheduleAdminDTO[],
-  index: number,
-  patch: Partial<SiteScheduleAdminDTO>
-): SiteScheduleAdminDTO[] {
-  return schedules.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item));
 }
 
 function AdminApp() {
@@ -381,6 +358,49 @@ function AdminApp() {
     await authenticate(passwordInput);
   }
 
+  function updateScheduleField(
+    index: number,
+    field: keyof ScheduleItemAdminDTO,
+    value: string
+  ): void {
+    setSiteSettings((previous) => {
+      if (!previous) {
+        return previous;
+      }
+
+      const schedules = normalizeScheduleDrafts(previous.schedules).map((schedule, itemIndex) =>
+        itemIndex === index ? { ...schedule, [field]: value } : schedule
+      );
+
+      return { ...previous, schedules };
+    });
+  }
+
+  function addScheduleItem(): void {
+    setSiteSettings((previous) =>
+      previous
+        ? { ...previous, schedules: [...normalizeScheduleDrafts(previous.schedules), { ...emptyScheduleDraft }] }
+        : previous
+    );
+  }
+
+  function removeScheduleItem(index: number): void {
+    setSiteSettings((previous) => {
+      if (!previous) {
+        return previous;
+      }
+
+      const schedules = normalizeScheduleDrafts(previous.schedules).filter(
+        (_schedule, itemIndex) => itemIndex !== index
+      );
+
+      return {
+        ...previous,
+        schedules: schedules.length > 0 ? schedules : [{ ...emptyScheduleDraft }]
+      };
+    });
+  }
+
   async function handleSaveSiteSettings(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
 
@@ -390,7 +410,10 @@ function AdminApp() {
 
     try {
       setIsSavingSite(true);
-      const updated = await updateSiteSettings(adminPassword, toApiSiteSettingsPayload(siteSettings));
+      const updated = await updateSiteSettings(adminPassword, {
+        ...siteSettings,
+        schedules: cleanScheduleDrafts(siteSettings.schedules)
+      });
       setSiteSettings(toSitePayload(updated));
       setSiteMessage("Informacoes do site atualizadas com sucesso.");
     } catch (error) {
@@ -782,101 +805,6 @@ function AdminApp() {
                 />
               </label>
 
-              <div className="full admin-training-schedules">
-                <h3>Datas e horarios dos treinos</h3>
-                <div className="admin-training-schedule-grid">
-                  {siteSettings.schedules.map((schedule, index) => (
-                    <div key={`schedule-${index + 1}`} className="admin-training-schedule-card">
-                      <strong>Treino {index + 1}</strong>
-
-                      <label>
-                        Dia/Data
-                        <input
-                          type="text"
-                          value={schedule.day}
-                          onChange={(event) =>
-                            setSiteSettings((previous) =>
-                              previous
-                                ? {
-                                    ...previous,
-                                    schedules: updateScheduleItem(previous.schedules, index, {
-                                      day: event.target.value
-                                    })
-                                  }
-                                : previous
-                            )
-                          }
-                          required
-                        />
-                      </label>
-
-                      <label>
-                        Horario
-                        <input
-                          type="text"
-                          value={schedule.time}
-                          onChange={(event) =>
-                            setSiteSettings((previous) =>
-                              previous
-                                ? {
-                                    ...previous,
-                                    schedules: updateScheduleItem(previous.schedules, index, {
-                                      time: event.target.value
-                                    })
-                                  }
-                                : previous
-                            )
-                          }
-                          required
-                        />
-                      </label>
-
-                      <label>
-                        Turma
-                        <input
-                          type="text"
-                          value={schedule.audience}
-                          onChange={(event) =>
-                            setSiteSettings((previous) =>
-                              previous
-                                ? {
-                                    ...previous,
-                                    schedules: updateScheduleItem(previous.schedules, index, {
-                                      audience: event.target.value
-                                    })
-                                  }
-                                : previous
-                            )
-                          }
-                          required
-                        />
-                      </label>
-
-                      <label>
-                        Nivel
-                        <input
-                          type="text"
-                          value={schedule.level}
-                          onChange={(event) =>
-                            setSiteSettings((previous) =>
-                              previous
-                                ? {
-                                    ...previous,
-                                    schedules: updateScheduleItem(previous.schedules, index, {
-                                      level: event.target.value
-                                    })
-                                  }
-                                : previous
-                            )
-                          }
-                          required
-                        />
-                      </label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
               <label className="full">
                 Chamada final
                 <textarea
@@ -1065,6 +993,61 @@ function AdminApp() {
                   required
                 />
               </label>
+
+              <div className="admin-schedules-editor full">
+                <div>
+                  <h3>Horarios de treino</h3>
+                  <p className="admin-helper-text">
+                    Atualize os dias, horarios e turmas exibidos na tabela publica do site.
+                  </p>
+                </div>
+
+                {normalizeScheduleDrafts(siteSettings.schedules).map((schedule, index) => (
+                  <div className="admin-schedule-row" key={index}>
+                    <label>
+                      Dia
+                      <input
+                        type="text"
+                        value={schedule.day}
+                        onChange={(event) => updateScheduleField(index, "day", event.target.value)}
+                        required
+                      />
+                    </label>
+
+                    <label>
+                      Horario
+                      <input
+                        type="text"
+                        value={schedule.time}
+                        onChange={(event) => updateScheduleField(index, "time", event.target.value)}
+                        required
+                      />
+                    </label>
+
+                    <label>
+                      Turma
+                      <input
+                        type="text"
+                        value={schedule.audience}
+                        onChange={(event) => updateScheduleField(index, "audience", event.target.value)}
+                        required
+                      />
+                    </label>
+
+                    <button
+                      className="button button-outline"
+                      type="button"
+                      onClick={() => removeScheduleItem(index)}
+                    >
+                      Remover
+                    </button>
+                  </div>
+                ))}
+
+                <button className="button button-outline" type="button" onClick={addScheduleItem}>
+                  Adicionar horario
+                </button>
+              </div>
 
               <button className="button button-primary full" type="submit" disabled={isSavingSite}>
                 {isSavingSite ? "Salvando..." : "Salvar informacoes do site"}
