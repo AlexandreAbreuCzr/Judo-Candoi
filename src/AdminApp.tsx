@@ -154,6 +154,15 @@ function cleanTestimonialDrafts(testimonials: TestimonialAdminDTO[]): Testimonia
     .filter((item) => item.quote.length > 0);
 }
 
+function normalizeSiteSettingsPayload(settings: SiteSettingsUpdateDTO): SiteSettingsUpdateDTO {
+  return {
+    ...settings,
+    schedules: cleanScheduleDrafts(settings.schedules),
+    gallery: cleanGalleryDrafts(settings.gallery),
+    testimonials: cleanTestimonialDrafts(settings.testimonials)
+  };
+}
+
 function toSitePayload(settings: SiteSettingsAdminResponseDTO): SiteSettingsUpdateDTO {
   const { id: _id, schedules, gallery, testimonials, ...payload } = settings;
   return {
@@ -492,19 +501,6 @@ function AdminApp() {
     );
   }
 
-  function removeGalleryItem(index: number): void {
-    setSiteSettings((previous) => {
-      if (!previous) {
-        return previous;
-      }
-
-      return {
-        ...previous,
-        gallery: normalizeGalleryDrafts(previous.gallery).filter((_item, itemIndex) => itemIndex !== index)
-      };
-    });
-  }
-
   function moveGalleryItem(index: number, direction: "up" | "down"): void {
     setSiteSettings((previous) => {
       if (!previous) {
@@ -555,21 +551,6 @@ function AdminApp() {
     );
   }
 
-  function removeTestimonialItem(index: number): void {
-    setSiteSettings((previous) => {
-      if (!previous) {
-        return previous;
-      }
-
-      return {
-        ...previous,
-        testimonials: normalizeTestimonialDrafts(previous.testimonials).filter(
-          (_item, itemIndex) => itemIndex !== index
-        )
-      };
-    });
-  }
-
   function moveTestimonialItem(index: number, direction: "up" | "down"): void {
     setSiteSettings((previous) => {
       if (!previous) {
@@ -591,22 +572,22 @@ function AdminApp() {
   async function persistSiteSettings(
     setMessage: (message: string) => void,
     successMessage: string,
-    errorMessage: string
+    errorMessage: string,
+    nextSettings?: SiteSettingsUpdateDTO
   ): Promise<void> {
+    const settingsToPersist = nextSettings ?? siteSettings;
 
-    if (!siteSettings) {
+    if (!settingsToPersist) {
       return;
     }
 
     try {
       setIsSavingSite(true);
       setMessage("Salvando alteracoes...");
-      const updated = await updateSiteSettings(adminPassword, {
-        ...siteSettings,
-        schedules: cleanScheduleDrafts(siteSettings.schedules),
-        gallery: cleanGalleryDrafts(siteSettings.gallery),
-        testimonials: cleanTestimonialDrafts(siteSettings.testimonials)
-      });
+      const updated = await updateSiteSettings(
+        adminPassword,
+        normalizeSiteSettingsPayload(settingsToPersist)
+      );
       setSiteSettings(toSitePayload(updated));
       setMessage(successMessage);
     } catch (error) {
@@ -620,6 +601,10 @@ function AdminApp() {
     index: number,
     event: ChangeEvent<HTMLInputElement>
   ): Promise<void> {
+    if (!siteSettings) {
+      return;
+    }
+
     const file = event.target.files?.[0];
     event.target.value = "";
 
@@ -631,8 +616,19 @@ function AdminApp() {
       setIsUploadingGalleryImage(true);
       setGalleryMessage("Enviando imagem da galeria...");
       const uploaded = await uploadAdminImage(adminPassword, file, "gallery");
-      updateGalleryField(index, "imageUrl", uploaded.url);
-      setGalleryMessage("Imagem da galeria enviada com sucesso.");
+      const nextSettings: SiteSettingsUpdateDTO = {
+        ...siteSettings,
+        gallery: normalizeGalleryDrafts(siteSettings.gallery).map((item, itemIndex) =>
+          itemIndex === index ? { ...item, imageUrl: uploaded.url } : item
+        )
+      };
+      setSiteSettings(nextSettings);
+      await persistSiteSettings(
+        setGalleryMessage,
+        "Imagem adicionada na galeria com sucesso.",
+        "Nao foi possivel salvar a imagem da galeria.",
+        nextSettings
+      );
     } catch (error) {
       setGalleryMessage(
         error instanceof Error ? error.message : "Nao foi possivel enviar a imagem da galeria."
@@ -666,6 +662,48 @@ function AdminApp() {
       setTestimonialMessage,
       "Depoimentos atualizados com sucesso.",
       "Nao foi possivel salvar os depoimentos."
+    );
+  }
+
+  async function handleRemoveGalleryItem(index: number): Promise<void> {
+    if (!siteSettings) {
+      return;
+    }
+
+    const nextSettings: SiteSettingsUpdateDTO = {
+      ...siteSettings,
+      gallery: normalizeGalleryDrafts(siteSettings.gallery).filter(
+        (_item, itemIndex) => itemIndex !== index
+      )
+    };
+
+    setSiteSettings(nextSettings);
+    await persistSiteSettings(
+      setGalleryMessage,
+      "Imagem removida da galeria com sucesso.",
+      "Nao foi possivel remover a imagem da galeria.",
+      nextSettings
+    );
+  }
+
+  async function handleRemoveTestimonialItem(index: number): Promise<void> {
+    if (!siteSettings) {
+      return;
+    }
+
+    const nextSettings: SiteSettingsUpdateDTO = {
+      ...siteSettings,
+      testimonials: normalizeTestimonialDrafts(siteSettings.testimonials).filter(
+        (_item, itemIndex) => itemIndex !== index
+      )
+    };
+
+    setSiteSettings(nextSettings);
+    await persistSiteSettings(
+      setTestimonialMessage,
+      "Depoimento removido com sucesso.",
+      "Nao foi possivel remover o depoimento.",
+      nextSettings
     );
   }
 
@@ -1490,8 +1528,7 @@ function AdminApp() {
           <section className="admin-panel">
             <h2>Galeria dos atletas</h2>
             <p className="admin-helper-text">
-              Adicione, remova e reorganize as imagens da galeria publica. Linhas sem imagem nao
-              sao salvas.
+              Aqui voce so adiciona ou remove fotos. O upload ja salva automatico.
             </p>
 
             <form className="admin-array-form" onSubmit={handleSaveGallerySettings}>
@@ -1520,7 +1557,7 @@ function AdminApp() {
                         <button
                           className="button button-primary"
                           type="button"
-                          onClick={() => removeGalleryItem(index)}
+                          onClick={() => void handleRemoveGalleryItem(index)}
                         >
                           Remover
                         </button>
@@ -1528,33 +1565,13 @@ function AdminApp() {
                     </div>
 
                     <div className="admin-form-grid">
-                      <label>
-                        Titulo da imagem
-                        <input
-                          type="text"
-                          value={item.title}
-                          onChange={(event) => updateGalleryField(index, "title", event.target.value)}
-                          placeholder="Ex: Campeonato regional"
-                        />
-                      </label>
-
-                      <label>
-                        Categoria
-                        <input
-                          type="text"
-                          value={item.category}
-                          onChange={(event) => updateGalleryField(index, "category", event.target.value)}
-                          placeholder="Treinos, Campeonatos, Podio..."
-                        />
-                      </label>
-
                       <label className="full">
-                        URL da imagem
+                        Foto
                         <input
                           type="text"
                           value={item.imageUrl}
                           onChange={(event) => updateGalleryField(index, "imageUrl", event.target.value)}
-                          placeholder="/uploads/gallery/... ou /images/athletes/..."
+                          placeholder="/uploads/gallery/... ou URL completa"
                         />
                         <div className="admin-inline-actions">
                           <input
@@ -1568,7 +1585,7 @@ function AdminApp() {
                             type="button"
                             onClick={() => updateGalleryField(index, "imageUrl", "")}
                           >
-                            Limpar imagem
+                            Limpar campo
                           </button>
                         </div>
                         {item.imageUrl ? (
@@ -1596,7 +1613,7 @@ function AdminApp() {
                   Adicionar imagem
                 </button>
                 <button className="button button-primary" type="submit" disabled={isSavingSite}>
-                  {isSavingSite ? "Salvando..." : "Salvar galeria"}
+                  {isSavingSite ? "Salvando..." : "Salvar alteracoes manuais"}
                 </button>
               </div>
             </form>
@@ -1609,8 +1626,7 @@ function AdminApp() {
           <section className="admin-panel">
             <h2>Depoimentos de transformacao</h2>
             <p className="admin-helper-text">
-              Gerencie os depoimentos exibidos na secao de historias reais de transformacao.
-              Linhas sem texto nao sao salvas.
+              Adicione, edite ou remova os depoimentos exibidos no site. Ao remover, salva na hora.
             </p>
 
             <form className="admin-array-form" onSubmit={handleSaveTestimonialSettings}>
@@ -1639,7 +1655,7 @@ function AdminApp() {
                         <button
                           className="button button-primary"
                           type="button"
-                          onClick={() => removeTestimonialItem(index)}
+                          onClick={() => void handleRemoveTestimonialItem(index)}
                         >
                           Remover
                         </button>
