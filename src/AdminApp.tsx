@@ -21,18 +21,20 @@ import {
 import type {
   BlogPostAdminResponseDTO,
   BlogPostUpsertDTO,
+  GalleryItemAdminDTO,
   PrideStudentAdminResponseDTO,
   PrideStudentUpsertDTO,
   ScheduleItemAdminDTO,
   SponsorAdminResponseDTO,
   SponsorUpsertDTO,
   SiteSettingsAdminResponseDTO,
-  SiteSettingsUpdateDTO
+  SiteSettingsUpdateDTO,
+  TestimonialAdminDTO
 } from "./types/admin";
 import "./styles.css";
 
 type AuthStatus = "idle" | "checking";
-type PanelTab = "site" | "blog" | "sponsors";
+type PanelTab = "site" | "gallery" | "testimonials" | "blog" | "sponsors";
 
 const PASSWORD_STORAGE_KEY = "judo-candoi-admin-password";
 
@@ -70,6 +72,18 @@ const emptyScheduleDraft: ScheduleItemAdminDTO = {
   audience: ""
 };
 
+const emptyGalleryItem: GalleryItemAdminDTO = {
+  title: "",
+  imageUrl: "",
+  category: "Atletas"
+};
+
+const emptyTestimonial: TestimonialAdminDTO = {
+  quote: "",
+  author: "",
+  role: ""
+};
+
 function normalizeScheduleDrafts(schedules?: ScheduleItemAdminDTO[]): ScheduleItemAdminDTO[] {
   if (!Array.isArray(schedules) || schedules.length === 0) {
     return [{ ...emptyScheduleDraft }];
@@ -96,11 +110,57 @@ function cleanScheduleDrafts(schedules: ScheduleItemAdminDTO[]): ScheduleItemAdm
   return cleaned.length > 0 ? cleaned : [{ ...emptyScheduleDraft }];
 }
 
+function normalizeGalleryDrafts(gallery?: GalleryItemAdminDTO[]): GalleryItemAdminDTO[] {
+  if (!Array.isArray(gallery) || gallery.length === 0) {
+    return [];
+  }
+
+  return gallery.map((item) => ({
+    title: item?.title ?? "",
+    imageUrl: item?.imageUrl ?? "",
+    category: item?.category ?? "Atletas"
+  }));
+}
+
+function cleanGalleryDrafts(gallery: GalleryItemAdminDTO[]): GalleryItemAdminDTO[] {
+  return gallery
+    .map((item, index) => ({
+      title: item.title.trim() || `Registro de atleta ${String(index + 1).padStart(2, "0")}`,
+      imageUrl: item.imageUrl.trim(),
+      category: item.category.trim() || "Atletas"
+    }))
+    .filter((item) => item.imageUrl.length > 0);
+}
+
+function normalizeTestimonialDrafts(testimonials?: TestimonialAdminDTO[]): TestimonialAdminDTO[] {
+  if (!Array.isArray(testimonials) || testimonials.length === 0) {
+    return [];
+  }
+
+  return testimonials.map((item) => ({
+    quote: item?.quote ?? "",
+    author: item?.author ?? "",
+    role: item?.role ?? ""
+  }));
+}
+
+function cleanTestimonialDrafts(testimonials: TestimonialAdminDTO[]): TestimonialAdminDTO[] {
+  return testimonials
+    .map((item, index) => ({
+      quote: item.quote.trim(),
+      author: item.author.trim() || `Aluno ${index + 1}`,
+      role: item.role.trim() || "Comunidade Judo Candoi"
+    }))
+    .filter((item) => item.quote.length > 0);
+}
+
 function toSitePayload(settings: SiteSettingsAdminResponseDTO): SiteSettingsUpdateDTO {
-  const { id: _id, schedules, ...payload } = settings;
+  const { id: _id, schedules, gallery, testimonials, ...payload } = settings;
   return {
     ...payload,
-    schedules: normalizeScheduleDrafts(schedules)
+    schedules: normalizeScheduleDrafts(schedules),
+    gallery: normalizeGalleryDrafts(gallery),
+    testimonials: normalizeTestimonialDrafts(testimonials)
   };
 }
 
@@ -132,6 +192,9 @@ function AdminApp() {
   const [siteSettings, setSiteSettings] = useState<SiteSettingsUpdateDTO | null>(null);
   const [siteMessage, setSiteMessage] = useState("");
   const [isSavingSite, setIsSavingSite] = useState(false);
+  const [galleryMessage, setGalleryMessage] = useState("");
+  const [testimonialMessage, setTestimonialMessage] = useState("");
+  const [isUploadingGalleryImage, setIsUploadingGalleryImage] = useState(false);
 
   const [blogPosts, setBlogPosts] = useState<BlogPostAdminResponseDTO[]>([]);
   const [blogDraft, setBlogDraft] = useState<BlogPostUpsertDTO>(emptyBlogDraft);
@@ -341,6 +404,12 @@ function AdminApp() {
     setAdminPassword("");
     setPasswordInput("");
     setAuthMessage("");
+    setSiteMessage("");
+    setGalleryMessage("");
+    setTestimonialMessage("");
+    setBlogMessage("");
+    setPrideMessage("");
+    setSponsorMessage("");
     setSiteSettings(null);
     setBlogPosts([]);
     setPrideStudents([]);
@@ -401,8 +470,129 @@ function AdminApp() {
     });
   }
 
-  async function handleSaveSiteSettings(event: FormEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault();
+  function updateGalleryField(index: number, field: keyof GalleryItemAdminDTO, value: string): void {
+    setSiteSettings((previous) => {
+      if (!previous) {
+        return previous;
+      }
+
+      const gallery = normalizeGalleryDrafts(previous.gallery).map((item, itemIndex) =>
+        itemIndex === index ? { ...item, [field]: value } : item
+      );
+
+      return { ...previous, gallery };
+    });
+  }
+
+  function addGalleryItem(): void {
+    setSiteSettings((previous) =>
+      previous
+        ? { ...previous, gallery: [...normalizeGalleryDrafts(previous.gallery), { ...emptyGalleryItem }] }
+        : previous
+    );
+  }
+
+  function removeGalleryItem(index: number): void {
+    setSiteSettings((previous) => {
+      if (!previous) {
+        return previous;
+      }
+
+      return {
+        ...previous,
+        gallery: normalizeGalleryDrafts(previous.gallery).filter((_item, itemIndex) => itemIndex !== index)
+      };
+    });
+  }
+
+  function moveGalleryItem(index: number, direction: "up" | "down"): void {
+    setSiteSettings((previous) => {
+      if (!previous) {
+        return previous;
+      }
+
+      const gallery = [...normalizeGalleryDrafts(previous.gallery)];
+      const nextIndex = direction === "up" ? index - 1 : index + 1;
+
+      if (nextIndex < 0 || nextIndex >= gallery.length) {
+        return previous;
+      }
+
+      [gallery[index], gallery[nextIndex]] = [gallery[nextIndex], gallery[index]];
+      return { ...previous, gallery };
+    });
+  }
+
+  function updateTestimonialField(
+    index: number,
+    field: keyof TestimonialAdminDTO,
+    value: string
+  ): void {
+    setSiteSettings((previous) => {
+      if (!previous) {
+        return previous;
+      }
+
+      const testimonials = normalizeTestimonialDrafts(previous.testimonials).map((item, itemIndex) =>
+        itemIndex === index ? { ...item, [field]: value } : item
+      );
+
+      return { ...previous, testimonials };
+    });
+  }
+
+  function addTestimonialItem(): void {
+    setSiteSettings((previous) =>
+      previous
+        ? {
+            ...previous,
+            testimonials: [
+              ...normalizeTestimonialDrafts(previous.testimonials),
+              { ...emptyTestimonial }
+            ]
+          }
+        : previous
+    );
+  }
+
+  function removeTestimonialItem(index: number): void {
+    setSiteSettings((previous) => {
+      if (!previous) {
+        return previous;
+      }
+
+      return {
+        ...previous,
+        testimonials: normalizeTestimonialDrafts(previous.testimonials).filter(
+          (_item, itemIndex) => itemIndex !== index
+        )
+      };
+    });
+  }
+
+  function moveTestimonialItem(index: number, direction: "up" | "down"): void {
+    setSiteSettings((previous) => {
+      if (!previous) {
+        return previous;
+      }
+
+      const testimonials = [...normalizeTestimonialDrafts(previous.testimonials)];
+      const nextIndex = direction === "up" ? index - 1 : index + 1;
+
+      if (nextIndex < 0 || nextIndex >= testimonials.length) {
+        return previous;
+      }
+
+      [testimonials[index], testimonials[nextIndex]] = [testimonials[nextIndex], testimonials[index]];
+      return { ...previous, testimonials };
+    });
+  }
+
+  async function persistSiteSettings(
+    setMessage: (message: string) => void,
+    successMessage: string,
+    errorMessage: string
+  ): Promise<void> {
 
     if (!siteSettings) {
       return;
@@ -410,19 +600,73 @@ function AdminApp() {
 
     try {
       setIsSavingSite(true);
+      setMessage("Salvando alteracoes...");
       const updated = await updateSiteSettings(adminPassword, {
         ...siteSettings,
-        schedules: cleanScheduleDrafts(siteSettings.schedules)
+        schedules: cleanScheduleDrafts(siteSettings.schedules),
+        gallery: cleanGalleryDrafts(siteSettings.gallery),
+        testimonials: cleanTestimonialDrafts(siteSettings.testimonials)
       });
       setSiteSettings(toSitePayload(updated));
-      setSiteMessage("Informacoes do site atualizadas com sucesso.");
+      setMessage(successMessage);
     } catch (error) {
-      setSiteMessage(
-        error instanceof Error ? error.message : "Nao foi possivel salvar as informacoes do site."
-      );
+      setMessage(error instanceof Error ? error.message : errorMessage);
     } finally {
       setIsSavingSite(false);
     }
+  }
+
+  async function handleGalleryImageUpload(
+    index: number,
+    event: ChangeEvent<HTMLInputElement>
+  ): Promise<void> {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    try {
+      setIsUploadingGalleryImage(true);
+      setGalleryMessage("Enviando imagem da galeria...");
+      const uploaded = await uploadAdminImage(adminPassword, file, "gallery");
+      updateGalleryField(index, "imageUrl", uploaded.url);
+      setGalleryMessage("Imagem da galeria enviada com sucesso.");
+    } catch (error) {
+      setGalleryMessage(
+        error instanceof Error ? error.message : "Nao foi possivel enviar a imagem da galeria."
+      );
+    } finally {
+      setIsUploadingGalleryImage(false);
+    }
+  }
+
+  async function handleSaveSiteSettings(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    await persistSiteSettings(
+      setSiteMessage,
+      "Informacoes do site atualizadas com sucesso.",
+      "Nao foi possivel salvar as informacoes do site."
+    );
+  }
+
+  async function handleSaveGallerySettings(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    await persistSiteSettings(
+      setGalleryMessage,
+      "Galeria dos atletas atualizada com sucesso.",
+      "Nao foi possivel salvar a galeria dos atletas."
+    );
+  }
+
+  async function handleSaveTestimonialSettings(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    await persistSiteSettings(
+      setTestimonialMessage,
+      "Depoimentos atualizados com sucesso.",
+      "Nao foi possivel salvar os depoimentos."
+    );
   }
 
   async function handleSaveBlogPost(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -589,7 +833,7 @@ function AdminApp() {
       <header className="admin-topbar">
         <div>
           <strong>Judo Candoi | Painel Admin</strong>
-          <p>Edite informacoes institucionais, blog e espacos de patrocinio.</p>
+          <p>Edite site, galeria, depoimentos, blog e espacos de patrocinio.</p>
         </div>
 
         <div className="admin-top-actions">
@@ -610,6 +854,20 @@ function AdminApp() {
             onClick={() => setActiveTab("site")}
           >
             Informacoes do Site
+          </button>
+          <button
+            type="button"
+            className={activeTab === "gallery" ? "active" : ""}
+            onClick={() => setActiveTab("gallery")}
+          >
+            Galeria
+          </button>
+          <button
+            type="button"
+            className={activeTab === "testimonials" ? "active" : ""}
+            onClick={() => setActiveTab("testimonials")}
+          >
+            Depoimentos
           </button>
           <button
             type="button"
@@ -1225,6 +1483,227 @@ function AdminApp() {
                 ))}
               </div>
             </div>
+          </section>
+        ) : null}
+
+        {!isLoadingData && activeTab === "gallery" && siteSettings ? (
+          <section className="admin-panel">
+            <h2>Galeria dos atletas</h2>
+            <p className="admin-helper-text">
+              Adicione, remova e reorganize as imagens da galeria publica. Linhas sem imagem nao
+              sao salvas.
+            </p>
+
+            <form className="admin-array-form" onSubmit={handleSaveGallerySettings}>
+              <div className="admin-array-list">
+                {normalizeGalleryDrafts(siteSettings.gallery).map((item, index) => (
+                  <article key={`${item.imageUrl || "gallery"}-${index}`} className="admin-array-card">
+                    <div className="admin-array-card-head">
+                      <strong>Imagem {index + 1}</strong>
+                      <div className="admin-inline-actions">
+                        <button
+                          className="button button-outline"
+                          type="button"
+                          onClick={() => moveGalleryItem(index, "up")}
+                          disabled={index === 0}
+                        >
+                          Subir
+                        </button>
+                        <button
+                          className="button button-outline"
+                          type="button"
+                          onClick={() => moveGalleryItem(index, "down")}
+                          disabled={index === normalizeGalleryDrafts(siteSettings.gallery).length - 1}
+                        >
+                          Descer
+                        </button>
+                        <button
+                          className="button button-primary"
+                          type="button"
+                          onClick={() => removeGalleryItem(index)}
+                        >
+                          Remover
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="admin-form-grid">
+                      <label>
+                        Titulo da imagem
+                        <input
+                          type="text"
+                          value={item.title}
+                          onChange={(event) => updateGalleryField(index, "title", event.target.value)}
+                          placeholder="Ex: Campeonato regional"
+                        />
+                      </label>
+
+                      <label>
+                        Categoria
+                        <input
+                          type="text"
+                          value={item.category}
+                          onChange={(event) => updateGalleryField(index, "category", event.target.value)}
+                          placeholder="Treinos, Campeonatos, Podio..."
+                        />
+                      </label>
+
+                      <label className="full">
+                        URL da imagem
+                        <input
+                          type="text"
+                          value={item.imageUrl}
+                          onChange={(event) => updateGalleryField(index, "imageUrl", event.target.value)}
+                          placeholder="/uploads/gallery/... ou /images/athletes/..."
+                        />
+                        <div className="admin-inline-actions">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(event) => void handleGalleryImageUpload(index, event)}
+                            disabled={isUploadingGalleryImage}
+                          />
+                          <button
+                            className="button button-outline"
+                            type="button"
+                            onClick={() => updateGalleryField(index, "imageUrl", "")}
+                          >
+                            Limpar imagem
+                          </button>
+                        </div>
+                        {item.imageUrl ? (
+                          <img
+                            className="admin-image-preview"
+                            src={resolveApiAssetUrl(item.imageUrl)}
+                            alt={`Preview galeria ${index + 1}`}
+                            loading="lazy"
+                          />
+                        ) : null}
+                      </label>
+                    </div>
+                  </article>
+                ))}
+              </div>
+
+              {normalizeGalleryDrafts(siteSettings.gallery).length === 0 ? (
+                <p className="admin-helper-text">
+                  Nenhuma imagem cadastrada ainda. Clique em adicionar para montar a galeria.
+                </p>
+              ) : null}
+
+              <div className="admin-inline-actions">
+                <button className="button button-outline" type="button" onClick={addGalleryItem}>
+                  Adicionar imagem
+                </button>
+                <button className="button button-primary" type="submit" disabled={isSavingSite}>
+                  {isSavingSite ? "Salvando..." : "Salvar galeria"}
+                </button>
+              </div>
+            </form>
+
+            {galleryMessage ? <p className="admin-message">{galleryMessage}</p> : null}
+          </section>
+        ) : null}
+
+        {!isLoadingData && activeTab === "testimonials" && siteSettings ? (
+          <section className="admin-panel">
+            <h2>Depoimentos de transformacao</h2>
+            <p className="admin-helper-text">
+              Gerencie os depoimentos exibidos na secao de historias reais de transformacao.
+              Linhas sem texto nao sao salvas.
+            </p>
+
+            <form className="admin-array-form" onSubmit={handleSaveTestimonialSettings}>
+              <div className="admin-array-list">
+                {normalizeTestimonialDrafts(siteSettings.testimonials).map((item, index) => (
+                  <article key={`${item.author || "testimonial"}-${index}`} className="admin-array-card">
+                    <div className="admin-array-card-head">
+                      <strong>Depoimento {index + 1}</strong>
+                      <div className="admin-inline-actions">
+                        <button
+                          className="button button-outline"
+                          type="button"
+                          onClick={() => moveTestimonialItem(index, "up")}
+                          disabled={index === 0}
+                        >
+                          Subir
+                        </button>
+                        <button
+                          className="button button-outline"
+                          type="button"
+                          onClick={() => moveTestimonialItem(index, "down")}
+                          disabled={index === normalizeTestimonialDrafts(siteSettings.testimonials).length - 1}
+                        >
+                          Descer
+                        </button>
+                        <button
+                          className="button button-primary"
+                          type="button"
+                          onClick={() => removeTestimonialItem(index)}
+                        >
+                          Remover
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="admin-form-grid">
+                      <label className="full">
+                        Depoimento
+                        <textarea
+                          rows={4}
+                          value={item.quote}
+                          onChange={(event) =>
+                            updateTestimonialField(index, "quote", event.target.value)
+                          }
+                          placeholder="Texto que vai aparecer entre aspas no site"
+                        />
+                      </label>
+
+                      <label>
+                        Autor
+                        <input
+                          type="text"
+                          value={item.author}
+                          onChange={(event) =>
+                            updateTestimonialField(index, "author", event.target.value)
+                          }
+                          placeholder="Ex: Maria S."
+                        />
+                      </label>
+
+                      <label>
+                        Relacao / cargo
+                        <input
+                          type="text"
+                          value={item.role}
+                          onChange={(event) =>
+                            updateTestimonialField(index, "role", event.target.value)
+                          }
+                          placeholder="Ex: Mae de atleta"
+                        />
+                      </label>
+                    </div>
+                  </article>
+                ))}
+              </div>
+
+              {normalizeTestimonialDrafts(siteSettings.testimonials).length === 0 ? (
+                <p className="admin-helper-text">
+                  Nenhum depoimento cadastrado ainda. Clique em adicionar para criar a secao.
+                </p>
+              ) : null}
+
+              <div className="admin-inline-actions">
+                <button className="button button-outline" type="button" onClick={addTestimonialItem}>
+                  Adicionar depoimento
+                </button>
+                <button className="button button-primary" type="submit" disabled={isSavingSite}>
+                  {isSavingSite ? "Salvando..." : "Salvar depoimentos"}
+                </button>
+              </div>
+            </form>
+
+            {testimonialMessage ? <p className="admin-message">{testimonialMessage}</p> : null}
           </section>
         ) : null}
 

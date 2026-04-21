@@ -1239,6 +1239,12 @@ th {
   width: 100%;
 }
 
+.blog-actions {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: center;
+}
+
 .sponsor-grid {
   width: 100%;
   margin: 1.45rem auto 0;
@@ -1629,6 +1635,35 @@ footer a {
   gap: 0.65rem;
 }
 
+.admin-array-form {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.admin-array-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.admin-array-card {
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  padding: 0.9rem;
+  background: #fbfcfe;
+}
+
+.admin-array-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  align-items: center;
+}
+
+.admin-array-card-head strong {
+  font-size: 1rem;
+}
+
 .admin-list-item {
   border: 1px solid var(--line);
   border-radius: 0.35rem;
@@ -1735,6 +1770,7 @@ footer a {
     grid-template-columns: 1fr;
   }
 
+  .admin-array-card-head,
   .admin-list-item {
     flex-direction: column;
   }

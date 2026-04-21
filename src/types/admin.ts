@@ -4,6 +4,18 @@ export interface ScheduleItemAdminDTO {
   audience: string;
 }
 
+export interface GalleryItemAdminDTO {
+  title: string;
+  imageUrl: string;
+  category: string;
+}
+
+export interface TestimonialAdminDTO {
+  quote: string;
+  author: string;
+  role: string;
+}
+
 export interface SiteSettingsAdminResponseDTO {
   id: number;
   brandName: string;
@@ -32,6 +44,8 @@ export interface SiteSettingsAdminResponseDTO {
   academyAddress: string;
   googleMapsEmbed: string;
   schedules: ScheduleItemAdminDTO[];
+  gallery: GalleryItemAdminDTO[];
+  testimonials: TestimonialAdminDTO[];
 }
 
 export type SiteSettingsUpdateDTO = Omit<SiteSettingsAdminResponseDTO, "id">;

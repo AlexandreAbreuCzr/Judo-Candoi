@@ -3,7 +3,6 @@ import { getSiteContent, resolveSiteAssetUrl } from "./api/siteApi";
 import type { SyntheticEvent } from "react";
 import { AnimatedCounter } from "./components/AnimatedCounter";
 import { SectionTitle } from "./components/SectionTitle";
-import { athleteMediaPool } from "./data/athletePhotoPool";
 import { fallbackSiteContent } from "./data/fallbackContent";
 import type { SiteContentResponseDTO } from "./types/site";
 import "./styles.css";
@@ -42,6 +41,7 @@ const PRIDE_HIGHLIGHT_IMAGES = [
 const HERO_ROTATION_INTERVAL_MS = 5000;
 const ATHLETE_ROTATION_INTERVAL_MS = 5200;
 const ATHLETE_FRAME_SIZE = 6;
+const BLOG_INITIAL_LIMIT = 3;
 const IMAGE_FALLBACK_SRC = "/images/site/fachada-academia-16x9.jpg";
 
 function extractWhatsAppNumber(whatsappUrl: string): string | null {
@@ -121,6 +121,7 @@ function App() {
   const [brokenBlogImages, setBrokenBlogImages] = useState<Record<string, boolean>>({});
   const [athleteRound, setAthleteRound] = useState(0);
   const [athleteSeed] = useState(() => Math.floor(Math.random() * 1000000));
+  const [isBlogArchiveOpen, setIsBlogArchiveOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -179,7 +180,13 @@ function App() {
   }, [selectedBlogSlug]);
 
   const whatsappUrl = content.callToActionSecondaryUrl || content.contact.whatsappUrl;
-  const blogPosts = content.blogPosts.length > 0 ? content.blogPosts : fallbackSiteContent.blogPosts;
+  const prideStudents = apiStatus === "online" ? content.prideStudents : fallbackSiteContent.prideStudents;
+  const athleteGalleryItems = apiStatus === "online" ? content.gallery : fallbackSiteContent.gallery;
+  const testimonialItems = apiStatus === "online" ? content.testimonials : fallbackSiteContent.testimonials;
+  const blogPosts = apiStatus === "online" ? content.blogPosts : fallbackSiteContent.blogPosts;
+  const featuredBlogPosts = blogPosts.slice(0, BLOG_INITIAL_LIMIT);
+  const archivedBlogPosts = blogPosts.slice(BLOG_INITIAL_LIMIT);
+  const visibleBlogPosts = isBlogArchiveOpen ? blogPosts : featuredBlogPosts;
   const hasRealSponsors = content.sponsors.length > 0;
   const sponsorCards = hasRealSponsors
     ? content.sponsors
@@ -234,8 +241,8 @@ function App() {
     });
   };
   const orderedAthleteItems = useMemo(
-    () => shuffleWithSeed(athleteMediaPool, athleteSeed),
-    [athleteSeed]
+    () => shuffleWithSeed(athleteGalleryItems, athleteSeed),
+    [athleteGalleryItems, athleteSeed]
   );
   const athleteVisibleItems = useMemo(() => {
     if (orderedAthleteItems.length === 0) {
@@ -462,7 +469,7 @@ function App() {
       </section>
 
       <main>
-        {content.prideStudents.length > 0 ? (
+        {prideStudents.length > 0 ? (
           <section className="section section-pride" id="orgulho-candoi">
             <div className="container">
               <SectionTitle
@@ -472,7 +479,7 @@ function App() {
               />
 
               <div className="pride-grid">
-                {content.prideStudents.map((student, index) => (
+                {prideStudents.map((student, index) => (
                   <article
                     key={`${student.name}-${student.month}`}
                     className={`pride-card${index === 0 ? " featured" : ""}`}
@@ -666,11 +673,11 @@ function App() {
             {athleteVisibleItems.length > 0 ? (
               <div className="athlete-grid">
                 {athleteVisibleItems.map((item) => (
-                  <article key={`${item.id}-${athleteRound}`} className="athlete-card">
+                  <article key={`${item.imageUrl}-${athleteRound}`} className="athlete-card">
                     <div className="athlete-card-media">
                       <img
-                        src={item.imageUrl}
-                        alt={`${item.athleteName} em um momento no Judo Candoi`}
+                        src={resolveSiteAssetUrl(item.imageUrl)}
+                        alt={item.title || "Momento de treino no Judo Candoi"}
                         loading="lazy"
                         onError={(event) => handleImageFallback(event, "/images/site/treino-forte-16x9.jpg")}
                       />
@@ -686,27 +693,29 @@ function App() {
           </div>
         </section>
 
-        <section className="section section-testimonials" id="depoimentos">
-          <div className="container">
-            <SectionTitle
-              eyebrow="Depoimentos"
-              title="Historias reais de transformacao"
-              description="Confianca construida com pais, alunos e comunidade."
-            />
+        {testimonialItems.length > 0 ? (
+          <section className="section section-testimonials" id="depoimentos">
+            <div className="container">
+              <SectionTitle
+                eyebrow="Depoimentos"
+                title="Historias reais de transformacao"
+                description="Confianca construida com pais, alunos e comunidade."
+              />
 
-            <div className="testimonial-grid">
-              {content.testimonials.map((testimonial) => (
-                <article key={`${testimonial.author}-${testimonial.quote}`} className="testimonial-card">
-                  <p>"{testimonial.quote}"</p>
-                  <footer>
-                    <strong>{testimonial.author}</strong>
-                    <span>{testimonial.role}</span>
-                  </footer>
-                </article>
-              ))}
+              <div className="testimonial-grid">
+                {testimonialItems.map((testimonial) => (
+                  <article key={`${testimonial.author}-${testimonial.quote}`} className="testimonial-card">
+                    <p>"{testimonial.quote}"</p>
+                    <footer>
+                      <strong>{testimonial.author}</strong>
+                      <span>{testimonial.role}</span>
+                    </footer>
+                  </article>
+                ))}
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        ) : null}
 
         <section className="section section-trial" id="aula-experimental">
           <div className="container">
@@ -824,35 +833,53 @@ function App() {
               description="Conteudo para pais, alunos e apaixonados por judo."
             />
 
-            <div className="blog-grid">
-              {blogPosts.map((post) => (
-                <article
-                  key={post.slug}
-                  className={`blog-card${post.imageUrl && !brokenBlogImages[post.slug] ? "" : " no-image"}`}
+            {visibleBlogPosts.length > 0 ? (
+              <div className="blog-grid">
+                {visibleBlogPosts.map((post) => (
+                  <article
+                    key={post.slug}
+                    className={`blog-card${post.imageUrl && !brokenBlogImages[post.slug] ? "" : " no-image"}`}
+                  >
+                    {post.imageUrl && !brokenBlogImages[post.slug] ? (
+                      <img
+                        src={resolveSiteAssetUrl(post.imageUrl)}
+                        alt={post.title}
+                        className="blog-card-image"
+                        loading="lazy"
+                        onError={() => markBlogImageAsBroken(post.slug)}
+                      />
+                    ) : null}
+                    <div className="blog-card-body">
+                      <h3>{post.title}</h3>
+                      <p>{post.excerpt}</p>
+                      <button
+                        className="button button-outline blog-read-button"
+                        type="button"
+                        onClick={() => setSelectedBlogSlug(post.slug)}
+                      >
+                        Ler artigo
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="gallery-empty">Nenhum artigo publicado no momento.</div>
+            )}
+
+            {archivedBlogPosts.length > 0 ? (
+              <div className="blog-actions">
+                <button
+                  className="button button-outline"
+                  type="button"
+                  onClick={() => setIsBlogArchiveOpen((previous) => !previous)}
                 >
-                  {post.imageUrl && !brokenBlogImages[post.slug] ? (
-                    <img
-                      src={resolveSiteAssetUrl(post.imageUrl)}
-                      alt={post.title}
-                      className="blog-card-image"
-                      loading="lazy"
-                      onError={() => markBlogImageAsBroken(post.slug)}
-                    />
-                  ) : null}
-                  <div className="blog-card-body">
-                    <h3>{post.title}</h3>
-                    <p>{post.excerpt}</p>
-                    <button
-                      className="button button-outline blog-read-button"
-                      type="button"
-                      onClick={() => setSelectedBlogSlug(post.slug)}
-                    >
-                      Ler artigo
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
+                  {isBlogArchiveOpen
+                    ? "Mostrar menos artigos"
+                    : `Ver arquivo do blog (+${archivedBlogPosts.length})`}
+                </button>
+              </div>
+            ) : null}
           </div>
         </section>
 
