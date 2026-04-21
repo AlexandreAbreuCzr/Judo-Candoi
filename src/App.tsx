@@ -250,8 +250,8 @@ function App() {
     }
 
     const frameSize = Math.min(ATHLETE_FRAME_SIZE, orderedAthleteItems.length);
-
-    const startIndex = (athleteRound * frameSize) % orderedAthleteItems.length;
+    const rotationStep = orderedAthleteItems.length <= ATHLETE_FRAME_SIZE ? 1 : frameSize;
+    const startIndex = (athleteRound * rotationStep) % orderedAthleteItems.length;
     const rotatedItems = [
       ...orderedAthleteItems.slice(startIndex),
       ...orderedAthleteItems.slice(0, startIndex)
@@ -261,7 +261,7 @@ function App() {
   }, [athleteRound, orderedAthleteItems]);
 
   useEffect(() => {
-    if (orderedAthleteItems.length <= ATHLETE_FRAME_SIZE) {
+    if (orderedAthleteItems.length <= 1) {
       return;
     }
 
@@ -673,7 +673,7 @@ function App() {
             {athleteVisibleItems.length > 0 ? (
               <div className="athlete-grid">
                 {athleteVisibleItems.map((item) => (
-                  <article key={`${item.imageUrl}-${athleteRound}`} className="athlete-card">
+                  <article key={item.imageUrl} className="athlete-card">
                     <div className="athlete-card-media">
                       <img
                         src={resolveSiteAssetUrl(item.imageUrl)}

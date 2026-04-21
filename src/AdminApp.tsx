@@ -18,6 +18,7 @@ import {
   updateSponsor,
   updateSiteSettings
 } from "./api/adminApi";
+import { getSiteContent } from "./api/siteApi";
 import type {
   BlogPostAdminResponseDTO,
   BlogPostUpsertDTO,
@@ -154,6 +155,41 @@ function cleanTestimonialDrafts(testimonials: TestimonialAdminDTO[]): Testimonia
     .filter((item) => item.quote.length > 0);
 }
 
+function hasResponseField<ResponseKey extends string>(
+  value: unknown,
+  field: ResponseKey
+): value is Record<ResponseKey, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    Object.prototype.hasOwnProperty.call(value, field)
+  );
+}
+
+function validateGalleryDrafts(gallery: GalleryItemAdminDTO[]): string | null {
+  const emptyImageIndex = normalizeGalleryDrafts(gallery).findIndex(
+    (item) => item.imageUrl.trim().length === 0
+  );
+
+  if (emptyImageIndex >= 0) {
+    return `Adicione a foto da imagem ${emptyImageIndex + 1} antes de salvar ou remova esse card.`;
+  }
+
+  return null;
+}
+
+function validateTestimonialDrafts(testimonials: TestimonialAdminDTO[]): string | null {
+  const emptyQuoteIndex = normalizeTestimonialDrafts(testimonials).findIndex(
+    (item) => item.quote.trim().length === 0
+  );
+
+  if (emptyQuoteIndex >= 0) {
+    return `Preencha o texto do depoimento ${emptyQuoteIndex + 1} antes de salvar ou remova esse card.`;
+  }
+
+  return null;
+}
+
 function normalizeSiteSettingsPayload(settings: SiteSettingsUpdateDTO): SiteSettingsUpdateDTO {
   return {
     ...settings,
@@ -163,13 +199,20 @@ function normalizeSiteSettingsPayload(settings: SiteSettingsUpdateDTO): SiteSett
   };
 }
 
-function toSitePayload(settings: SiteSettingsAdminResponseDTO): SiteSettingsUpdateDTO {
+function toSitePayload(
+  settings: SiteSettingsAdminResponseDTO,
+  fallbackCollections?: Partial<Pick<SiteSettingsUpdateDTO, "gallery" | "testimonials">>
+): SiteSettingsUpdateDTO {
   const { id: _id, schedules, gallery, testimonials, ...payload } = settings;
   return {
     ...payload,
     schedules: normalizeScheduleDrafts(schedules),
-    gallery: normalizeGalleryDrafts(gallery),
-    testimonials: normalizeTestimonialDrafts(testimonials)
+    gallery: hasResponseField(settings, "gallery")
+      ? normalizeGalleryDrafts(gallery)
+      : normalizeGalleryDrafts(fallbackCollections?.gallery),
+    testimonials: hasResponseField(settings, "testimonials")
+      ? normalizeTestimonialDrafts(testimonials)
+      : normalizeTestimonialDrafts(fallbackCollections?.testimonials)
   };
 }
 
@@ -285,14 +328,20 @@ function AdminApp() {
   async function loadPanelData(password: string): Promise<void> {
     try {
       setIsLoadingData(true);
-      const [settings, posts, students, sponsorItems] = await Promise.all([
+      const [settings, posts, students, sponsorItems, publicContent] = await Promise.all([
         getSiteSettings(password),
         listBlogPosts(password),
         listPrideStudents(password),
-        listSponsors(password)
+        listSponsors(password),
+        getSiteContent().catch(() => null)
       ]);
 
-      setSiteSettings(toSitePayload(settings));
+      setSiteSettings(
+        toSitePayload(settings, {
+          gallery: publicContent?.gallery,
+          testimonials: publicContent?.testimonials
+        })
+      );
       setBlogPosts(posts);
       setPrideStudents(students);
       setSponsors(sponsorItems);
@@ -588,7 +637,12 @@ function AdminApp() {
         adminPassword,
         normalizeSiteSettingsPayload(settingsToPersist)
       );
-      setSiteSettings(toSitePayload(updated));
+      setSiteSettings(
+        toSitePayload(updated, {
+          gallery: settingsToPersist.gallery,
+          testimonials: settingsToPersist.testimonials
+        })
+      );
       setMessage(successMessage);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : errorMessage);
@@ -649,6 +703,16 @@ function AdminApp() {
 
   async function handleSaveGallerySettings(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
+    if (!siteSettings) {
+      return;
+    }
+
+    const validationMessage = validateGalleryDrafts(siteSettings.gallery);
+    if (validationMessage) {
+      setGalleryMessage(validationMessage);
+      return;
+    }
+
     await persistSiteSettings(
       setGalleryMessage,
       "Galeria dos atletas atualizada com sucesso.",
@@ -658,6 +722,16 @@ function AdminApp() {
 
   async function handleSaveTestimonialSettings(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
+    if (!siteSettings) {
+      return;
+    }
+
+    const validationMessage = validateTestimonialDrafts(siteSettings.testimonials);
+    if (validationMessage) {
+      setTestimonialMessage(validationMessage);
+      return;
+    }
+
     await persistSiteSettings(
       setTestimonialMessage,
       "Depoimentos atualizados com sucesso.",
